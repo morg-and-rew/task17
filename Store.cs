@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 public class Good
 {
@@ -12,20 +11,29 @@ public class Good
     }
 }
 
-public class Warehouse
+public interface IInventory
+{
+    void Deliver(Good good, int count);
+    bool HasEnough(Good good, int count);
+    void Take(Good good, int count);
+}
+
+public class Warehouse : IInventory
 {
     private Dictionary<Good, int> _goods = new Dictionary<Good, int>();
 
-    public void Delive(Good good, int count)
+    public void Deliver(Good good, int count)
     {
+        if (good == null)
+            throw new ArgumentNullException(nameof(good), "Good cannot be null.");
+
+        if (count < 0)
+            throw new ArgumentException("Count must be non-negative.");
+
         if (_goods.ContainsKey(good))
-        {
             _goods[good] += count;
-        }
         else
-        {
             _goods.Add(good, count);
-        }
     }
 
     public bool HasEnough(Good good, int count)
@@ -35,78 +43,90 @@ public class Warehouse
 
     public void Take(Good good, int count)
     {
-        if (HasEnough(good, count))
-        {
-            _goods[good] -= count;
-        }
-        else
-        {
+        if (good == null)
+            throw new ArgumentNullException(nameof(good), "Good cannot be null.");
+
+        if (count < 0)
+            throw new ArgumentException("Count must be non-negative.");
+
+        if (!_goods.ContainsKey(good) || _goods[good] < count)
             throw new Exception($"Not enough {good.Name} in warehouse.");
-        }
+
+        _goods[good] -= count;
     }
 }
 
 public class Cart
 {
     private Dictionary<Good, int> _items = new Dictionary<Good, int>();
-    private Warehouse _warehouse;
+    private Dictionary<Good, int> _reservations = new Dictionary<Good, int>();
+    private IInventory _inventory;
 
-    public Cart(Warehouse warehouse)
+    public Cart(IInventory inventory)
     {
-        _warehouse = warehouse;
+        if (inventory == null)
+            throw new NullReferenceException("Inventory cannot be null.");
+
+        _inventory = inventory;
     }
 
     public void Add(Good good, int count)
     {
-        if (_warehouse.HasEnough(good, count))
-        {
-            if (_items.ContainsKey(good))
-            {
-                _items[good] += count;
-            }
-            else
-            {
-                _items.Add(good, count);
-            }
+        if (good == null)
+            throw new ArgumentNullException(nameof(good), "Good cannot be null.");
 
-            _warehouse.Take(good, count);
-        }
-        else
-        {
+        if (count < 0)
+            throw new ArgumentException("Count must be non-negative.");
+
+        if (!_inventory.HasEnough(good, count))
             throw new Exception($"Not enough {good.Name} in warehouse.");
-        }
+
+        if (_reservations.ContainsKey(good))
+            _reservations[good] += count;
+        else
+            _reservations.Add(good, count);
     }
 
     public Order Order()
     {
+        foreach (var item in _reservations)
+        {
+            _inventory.Take(item.Key, item.Value);
+        }
+
+        _reservations.Clear();
+
         return new Order(_items);
     }
 }
 
 public class Order
 {
-    public string Paylink { get; private set; }
-    public Dictionary<Good, int> Items { get; private set; }
-
     public Order(Dictionary<Good, int> items)
     {
         Items = items;
         Paylink = $"https://example.com/order/{Guid.NewGuid()}";
     }
+
+    public string Paylink { get; private set; }
+    public Dictionary<Good, int> Items { get; private set; }
 }
 
 public class Shop
 {
-    private Warehouse _warehouse;
+    private IInventory _inventory;
 
-    public Shop(Warehouse warehouse)
+    public Shop(IInventory inventory)
     {
-        _warehouse = warehouse;
+        if (inventory == null)
+            throw new NullReferenceException("Inventory cannot be null.");
+
+        _inventory = inventory;
     }
 
     public Cart Cart()
     {
-        return new Cart(_warehouse);
+        return new Cart(_inventory);
     }
 }
 
@@ -121,30 +141,20 @@ public class Example
 
         Shop shop = new Shop(warehouse);
 
-        warehouse.Delive(iPhone12, 10);
-        warehouse.Delive(iPhone11, 1);
+        warehouse.Deliver(iPhone12, 10);
+        warehouse.Deliver(iPhone11, 1);
 
-        Cart cart = shop.Cart();
+        Cart cart1 = shop.Cart();
+        cart1.Add(iPhone12, 2);
 
-        try
-        {
-            cart.Add(iPhone12, 4);
-            cart.Add(iPhone11, 3);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
+        Cart cart2 = shop.Cart();
+        cart2.Add(iPhone12, 1);
 
-        Console.WriteLine(cart.Order().Paylink);
+        Order order1 = cart1.Order();
+        Console.WriteLine(order1.Paylink);
 
-        try
-        {
-            cart.Add(iPhone12, 9);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
+        cart2.Add(iPhone12, 1);
+        Order order2 = cart2.Order();
+        Console.WriteLine(order2.Paylink);
     }
 }
