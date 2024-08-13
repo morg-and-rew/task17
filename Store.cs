@@ -3,38 +3,24 @@ using System.Collections.Generic;
 
 public class Good
 {
-    public string Name { get; private set; }
-
     public Good(string name)
     {
         Name = name;
     }
+
+    public string Name { get; private set; }
 }
 
 public interface IInventory
 {
-    void Deliver(Good good, int count);
     bool HasEnough(Good good, int count);
     void Take(Good good, int count);
+    void Deliver(Good good, int count);
 }
 
 public class Warehouse : IInventory
 {
-    private Dictionary<Good, int> _goods = new Dictionary<Good, int>();
-
-    public void Deliver(Good good, int count)
-    {
-        if (good == null)
-            throw new ArgumentNullException(nameof(good), "Good cannot be null.");
-
-        if (count < 0)
-            throw new ArgumentException("Count must be non-negative.");
-
-        if (_goods.ContainsKey(good))
-            _goods[good] += count;
-        else
-            _goods.Add(good, count);
-    }
+    private readonly Dictionary<Good, int> _goods = new Dictionary<Good, int>();
 
     public bool HasEnough(Good good, int count)
     {
@@ -54,13 +40,26 @@ public class Warehouse : IInventory
 
         _goods[good] -= count;
     }
+
+    public void Deliver(Good good, int count)
+    {
+        if (good == null)
+            throw new ArgumentNullException(nameof(good), "Good cannot be null.");
+
+        if (count < 0)
+            throw new ArgumentException("Count must be non-negative.");
+
+        if (_goods.ContainsKey(good))
+            _goods[good] += count;
+        else
+            _goods.Add(good, count);
+    }
 }
 
 public class Cart
 {
-    private Dictionary<Good, int> _items = new Dictionary<Good, int>();
-    private Dictionary<Good, int> _reservations = new Dictionary<Good, int>();
-    private IInventory _inventory;
+    private readonly IInventory _inventory;
+    private readonly Dictionary<Good, int> _currentOrder = new Dictionary<Good, int>();
 
     public Cart(IInventory inventory)
     {
@@ -81,22 +80,22 @@ public class Cart
         if (!_inventory.HasEnough(good, count))
             throw new Exception($"Not enough {good.Name} in warehouse.");
 
-        if (_reservations.ContainsKey(good))
-            _reservations[good] += count;
+        if (_currentOrder.ContainsKey(good))
+            _currentOrder[good] += count;
         else
-            _reservations.Add(good, count);
+            _currentOrder.Add(good, count);
     }
 
     public Order Order()
     {
-        foreach (var item in _reservations)
+        foreach (var item in _currentOrder)
         {
             _inventory.Take(item.Key, item.Value);
         }
 
-        _reservations.Clear();
+        _currentOrder.Clear();
 
-        return new Order(_items);
+        return new Order(_currentOrder);
     }
 }
 
@@ -114,7 +113,7 @@ public class Order
 
 public class Shop
 {
-    private IInventory _inventory;
+    private readonly IInventory _inventory;
 
     public Shop(IInventory inventory)
     {
@@ -151,10 +150,6 @@ public class Example
         cart2.Add(iPhone12, 1);
 
         Order order1 = cart1.Order();
-        Console.WriteLine(order1.Paylink);
-
-        cart2.Add(iPhone12, 1);
         Order order2 = cart2.Order();
-        Console.WriteLine(order2.Paylink);
     }
 }
